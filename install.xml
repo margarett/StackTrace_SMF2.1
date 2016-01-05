@@ -1,0 +1,104 @@
+<?xml version="1.0"?>
+<!DOCTYPE modification SYSTEM "http://www.simplemachines.org/xml/modification">
+<modification xmlns="http://www.simplemachines.org/xml/modification" xmlns:smf="http://www.simplemachines.org/">
+	<id>Arantor:StackTrace</id>
+	<version>1.0.8</version>
+
+	<file name="$themedir/Errors.template.php">
+		<operation>
+			<search position="replace"><![CDATA[
+								', $txt['line'], ': ', $error['file']['line'], '
+							</div>
+						</div>';
+]]></search>
+			<add><![CDATA[
+								', $txt['line'], ': ', $error['file']['line'], '
+							</div>
+						</div>';
+
+		if (!empty($error['stack_trace']))
+			echo '
+						<div style="float: left; width: 100%; padding: 4px 0; line-height: 1.6em; border-top: 1px solid #e3e3e3;">
+							<div>', $error['stack_trace'], '</div>
+						</div>';
+]]></add>
+		</operation>
+	</file>
+
+	<file name="$sourcedir/ManageErrors.php">
+		<operation>
+			<search position="replace"><![CDATA[		SELECT id_error, id_member, ip, url, log_time, message, session, error_type, file, line
+		FROM {db_prefix}log_errors]]></search>
+			<add><![CDATA[		SELECT id_error, id_member, ip, url, log_time, message, session, error_type, file, line, stack_trace
+		FROM {db_prefix}log_errors]]></add>
+		</operation>
+		<operation>
+			<search position="replace"><![CDATA[		if (!empty($row['file']) && !empty($row['line']))]]></search>
+			<add><![CDATA[		$context['errors'][$row['id_error']]['stack_trace'] = '';
+		if (!empty($row['stack_trace']))
+		{
+			$stack_trace = @unserialize($row['stack_trace']);
+			if (!empty($stack_trace))
+			{
+				$context['errors'][$row['id_error']]['stack_trace'] = '<table>';
+				foreach ($stack_trace as $frame)
+				{
+					$context['errors'][$row['id_error']]['stack_trace'] .= '<tr><td>' . $frame['function'] . '</td><td>' . $frame['line'] . '</td></tr>';
+				}
+				$context['errors'][$row['id_error']]['stack_trace'] .= '</table>';
+			}
+		}
+
+		if (!empty($row['file']) && !empty($row['line']))]]></add>
+		</operation>
+	</file>
+
+	<file name="$sourcedir/Errors.php">
+		<operation>
+			<search position="replace"><![CDATA[		// Insert the error into the database.
+		$smcFunc['db_insert']('',
+			'{db_prefix}log_errors',
+			array('id_member' => 'int', 'log_time' => 'int', 'ip' => 'string-16', 'url' => 'string-65534', 'message' => 'string-65534', 'session' => 'string', 'error_type' => 'string', 'file' => 'string-255', 'line' => 'int'),
+			$error_info,
+			array('id_error')
+		);]]></search>
+			<add><![CDATA[		// Insert the error into the database.
+		$stack_trace = '';
+		if (!empty($modSettings['disableTemplateEval']))
+		{
+			global $boarddir, $sourcedir;
+			$stack_trace = array();
+			$repl = array($boarddir => '', $sourcedir => 'Sources');
+			foreach (debug_backtrace() as $this_error)
+			{
+				// Empty contents? Nothing to show, sorry...
+				if (empty($this_error['file']) || empty($this_error['function']))
+					continue;
+				// We don't need to log the error handler itself.
+				if (substr($this_error['file'], -10) == 'Errors.php' && $this_error['function'] == 'log_error')
+					continue;
+				if (substr($this_error['file'], -8) == 'Subs.php' && $this_error['function'] == 'error_handler')
+					continue;
+
+				// Certain anonymous calls do not end up in this fashion.
+				$frame = array(
+					'line' => $smcFunc['htmlspecialchars'](strtr($this_error['file'], $repl) . ':' . $this_error['line']),
+					'function' => $smcFunc['htmlspecialchars']((!empty($this_error['class']) ? $this_error['class'] . '->' : '') . $this_error['function']),
+				);
+				if ($frame['line'] != ':')
+					$stack[] = $frame;
+			}
+			if (!empty($stack))
+				$stack_trace = serialize(array_reverse($stack));
+		}
+
+		$smcFunc['db_insert']('',
+			'{db_prefix}log_errors',
+			array('id_member' => 'int', 'log_time' => 'int', 'ip' => 'string-16', 'url' => 'string-65534', 'message' => 'string-65534', 'session' => 'string', 'error_type' => 'string', 'file' => 'string-255', 'line' => 'int', 'stack_trace' => 'string'),
+			array_merge($error_info, array($stack_trace)),
+			array('id_error')
+		);]]></add>
+		</operation>
+	</file>
+
+</modification>
