@@ -37,7 +37,7 @@
 			<add><![CDATA[		$context['errors'][$row['id_error']]['stack_trace'] = '';
 		if (!empty($row['stack_trace']))
 		{
-			$stack_trace = @unserialize($row['stack_trace']);
+			$stack_trace = @json_decode($row['stack_trace'], true);
 			if (!empty($stack_trace))
 			{
 				$context['errors'][$row['id_error']]['stack_trace'] = '<table>';
@@ -89,7 +89,7 @@
 					$stack[] = $frame;
 			}
 			if (!empty($stack))
-				$stack_trace = serialize(array_reverse($stack));
+				$stack_trace = json_encode(array_reverse($stack));
 		}
 
 		$smcFunc['db_insert']('',
